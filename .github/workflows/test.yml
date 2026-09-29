@@ -4,6 +4,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      - name: Диагностика секретов
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          echo "Длина токена: ${#TOKEN}"
+          echo "В токене есть двоеточие: $([[ "$TOKEN" == *:* ]] && echo да || echo нет)"
+          echo "Длина chat_id: ${#CHAT_ID}"
+          echo "chat_id из цифр: $([[ "$CHAT_ID" =~ ^-?[0-9]+$ ]] && echo да || echo нет)"
       - name: Отправить тестовое сообщение
         env:
           TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -12,3 +21,4 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             -d chat_id="${CHAT_ID}" \
             -d text="Проверка из GitHub Actions: секреты работают"
+            
