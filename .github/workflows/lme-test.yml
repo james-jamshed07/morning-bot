@@ -1,0 +1,12 @@
+name: Проверка LME
+
+on: workflow_dispatch
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Запросить данные LME и показать, что пришло
+        run: python3 lme_probe.py
