@@ -19,6 +19,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import profinance
+
 # ------------------------- НАСТРОЙКИ -------------------------
 TIMEZONE = "Asia/Dushanbe"      # ваш часовой пояс
 SEND_TIME = (8, 0)              # во сколько слать: (часы, минуты)
@@ -119,10 +121,34 @@ def get_news():
 
 
 # ---------- цены (пока заглушка) ----------
+# (подпись в сообщении, название у ProFinance, знаков после запятой)
+PRICE_ITEMS = [
+    ("Золото", "Gold", 2),
+    ("Алюминий", "Aluminum", 2),
+    ("Нефть Brent", "Brent oil", 2),
+    ("EUR/USD", "EUR/USD", 5),
+    ("USD/RUB", "USD/RUB", 3),
+]
+
+
 def get_prices():
-    """Вернуть список строк вида «Золото: 1234 (дата)». Подключим позже:
-    LME (cash offer), ProFinance (золото, Brent, EUR/USD, USD/RUB, алюминий)."""
-    return []
+    """Список строк для сообщения с ценами: столбец Last у ProFinance.
+    В скобках время котировки, как его отдаёт сайт.
+    Цена LME (cash offer) подключится отдельно."""
+    try:
+        quotes, _info, _raw = profinance.fetch_quotes(wanted=[name for _, name, _ in PRICE_ITEMS])
+    except Exception as e:  # noqa: BLE001
+        return [f"⚠️ ProFinance: не удалось получить цены ({type(e).__name__}: {e})"]
+    lines = []
+    for label, name, digits in PRICE_ITEMS:
+        q = quotes.get(name)
+        if not q:
+            lines.append(f"{label}: нет данных")
+            continue
+        number = f"{q['price']:,.{digits}f}".replace(",", " ")
+        stamp = f" ({q['time']})" if q["time"] else ""
+        lines.append(f"{label}: {number}{stamp}")
+    return lines
 
 
 # ---------- состояние (что уже отправлено) ----------
@@ -200,7 +226,7 @@ def main():
 
     price_lines = get_prices()
     if price_lines:
-        messages.append("💹 Цены и курсы\n\n" + "\n".join(price_lines))
+        messages.append("💹 Цены и курсы (ProFinance, Last)\n\n" + "\n".join(price_lines))
 
     try:
         fresh = [(t, l) for t, l in get_news() if l not in sent_set]
@@ -217,6 +243,9 @@ def main():
     save_state(sent)
     print(f"Готово: сообщений {len(messages)}, новых ссылок {len(new_items)}")
 
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()
