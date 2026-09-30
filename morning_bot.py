@@ -153,15 +153,19 @@ def get_prices():
 
 # ---------- состояние (что уже отправлено) ----------
 def load_state():
+    """Состояние: отправленные ссылки и дата последней автоматической отправки."""
     try:
-        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
-        return []
+        return {"links": [], "last_run": ""}
+    if isinstance(data, list):  # старый формат: просто список ссылок
+        return {"links": data, "last_run": ""}
+    return {"links": data.get("links", []), "last_run": data.get("last_run", "")}
 
 
-def save_state(links):
+def save_state(links, last_run):
     STATE_FILE.write_text(
-        json.dumps(links[-KEEP_SENT:], ensure_ascii=False, indent=1) + "\n",
+        json.dumps({"last_run": last_run, "links": links[-KEEP_SENT:]}, ensure_ascii=False, indent=1) + "\n",
         encoding="utf-8",
     )
 
@@ -220,7 +224,14 @@ def main():
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     chat_id = os.environ["TELEGRAM_CHAT_ID"]
 
-    sent = load_state()
+    manual = bool(os.environ.get("SKIP_WAIT"))  # ручной запуск кнопкой Run workflow
+    today = datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y-%m-%d")
+    state = load_state()
+    if not manual and state["last_run"] == today:
+        print("Сводка за сегодня уже отправлена, выхожу без повторной отправки")
+        return
+
+    sent = state["links"]
     sent_set = set(sent)
     messages, new_items = [], []
 
@@ -240,12 +251,11 @@ def main():
         send_telegram(token, chat_id, text)
 
     sent.extend(link for _, link in new_items)
-    save_state(sent)
+    # дату «сводка за сегодня отправлена» ставим только автоматическим запускам,
+    # чтобы ручная проверка среди дня не отменила утреннюю рассылку
+    save_state(sent, state["last_run"] if manual else today)
     print(f"Готово: сообщений {len(messages)}, новых ссылок {len(new_items)}")
 
-
-if __name__ == "__main__":
-    main()
 
 if __name__ == "__main__":
     main()
