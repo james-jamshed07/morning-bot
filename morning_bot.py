@@ -207,17 +207,19 @@ def send_telegram(token, chat_id, text):
 
 
 # ---------- ожидание 8:00 ----------
-def wait_until_send_time():
+PRICE_LEAD_SECONDS = 20   # за сколько секунд до 8:00 брать свежие цены
+
+
+def wait_until_send_time(lead_seconds=0):
+    """Спит до времени отправки минус lead_seconds (только если оно близко и впереди)."""
     if os.environ.get("SKIP_WAIT"):
         return
     now = datetime.now(ZoneInfo(TIMEZONE))
     target = now.replace(hour=SEND_TIME[0], minute=SEND_TIME[1], second=0, microsecond=0)
-    delta = (target - now).total_seconds()
+    delta = (target - now).total_seconds() - lead_seconds
     if 0 < delta <= MAX_WAIT_MINUTES * 60:
-        print(f"Жду {int(delta)} сек. до {SEND_TIME[0]:02d}:{SEND_TIME[1]:02d}")
+        print(f"Жду {int(delta)} сек.")
         time.sleep(delta)
-    else:
-        print("Время отправки уже наступило или далеко: отправляю сразу")
 
 
 def main():
@@ -235,10 +237,7 @@ def main():
     sent_set = set(sent)
     messages, new_items = [], []
 
-    price_lines = get_prices()
-    if price_lines:
-        messages.append("💹 Цены и курсы (ProFinance, Last)\n\n" + "\n".join(price_lines))
-
+    # 1. Новости собираем сразу (это не зависит от времени)
     try:
         fresh = [(t, l) for t, l in get_news() if l not in sent_set]
         new_items = fresh[:MAX_ITEMS]
@@ -246,6 +245,14 @@ def main():
     except Exception as e:  # noqa: BLE001
         messages.append(f"⚠️ Asia-Plus: не удалось получить новости ({e})")
 
+    # 2. Просыпаемся чуть раньше 8:00 и берём цены ПЕРЕД самой отправкой,
+    #    чтобы в сообщении были свежие значения, а не снятые при старте запуска
+    wait_until_send_time(lead_seconds=PRICE_LEAD_SECONDS)
+    price_lines = get_prices()
+    if price_lines:
+        messages.insert(0, "💹 Цены и курсы (ProFinance, Last)\n\n" + "\n".join(price_lines))
+
+    # 3. Дожидаемся ровно 8:00 и отправляем
     wait_until_send_time()
     for text in messages:
         send_telegram(token, chat_id, text)
